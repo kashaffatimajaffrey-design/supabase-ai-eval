@@ -1,0 +1,20 @@
+# secrets — never commit these
+.env
+.env.local
+backend/.env
+frontend/.env
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# node
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# os
+.DS_Store

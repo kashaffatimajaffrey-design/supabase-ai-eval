@@ -1,0 +1,50 @@
+[
+  {
+    "query": "How do I enable Row Level Security on a table?",
+    "expected_answer": "Run ALTER TABLE <table> ENABLE ROW LEVEL SECURITY, then create policies with CREATE POLICY to define who can select/insert/update/delete rows. Without policies, RLS blocks all access by default once enabled.",
+    "category": "rls",
+    "difficulty": "easy"
+  },
+  {
+    "query": "What's the difference between the anon key and the service_role key?",
+    "expected_answer": "The anon key is safe for client-side use and respects Row Level Security policies. The service_role key bypasses RLS entirely and must only be used in trusted server-side environments, never shipped to a browser or mobile app.",
+    "category": "auth",
+    "difficulty": "medium"
+  },
+  {
+    "query": "How do I store and query vector embeddings in Supabase?",
+    "expected_answer": "Enable the pgvector extension, add a column of type vector(n) where n matches your embedding model's dimension, then query similarity using operators like <=> (cosine distance) or <-> (L2 distance), typically wrapped in a Postgres function exposed via RPC.",
+    "category": "pgvector",
+    "difficulty": "medium"
+  },
+  {
+    "query": "How do Supabase Edge Functions differ from a regular backend API route?",
+    "expected_answer": "Edge Functions are Deno-based serverless functions deployed close to users globally, invoked via HTTPS, with no server to manage. Unlike a traditional backend route, they scale automatically and are deployed independently via the Supabase CLI.",
+    "category": "edge-functions",
+    "difficulty": "medium"
+  },
+  {
+    "query": "Can I use Supabase Storage with Row Level Security policies?",
+    "expected_answer": "Yes — Storage buckets and objects are governed by RLS policies on the storage.objects table, so you can restrict who can upload, read, or delete files using the same policy mechanism as regular tables.",
+    "category": "storage",
+    "difficulty": "hard"
+  },
+  {
+    "query": "What happens if I enable RLS on a table but don't add any policies?",
+    "expected_answer": "All access is denied by default. With RLS enabled and zero policies, no rows are readable or writable through the API (except via the service_role key, which bypasses RLS).",
+    "category": "rls",
+    "difficulty": "hard"
+  },
+  {
+    "query": "How do I run a database migration with the Supabase CLI?",
+    "expected_answer": "Use `supabase migration new <name>` to create a migration file, write SQL changes into it, then apply with `supabase db push` (remote) or `supabase migration up` (local).",
+    "category": "cli",
+    "difficulty": "easy"
+  },
+  {
+    "query": "What index type should I use for approximate nearest neighbor search on embeddings?",
+    "expected_answer": "Use an ivfflat or hnsw index on the vector column (e.g. `using ivfflat (embedding vector_cosine_ops)`), which trades a small amount of recall for much faster similarity search compared to a full sequential scan.",
+    "category": "pgvector",
+    "difficulty": "hard"
+  }
+]
