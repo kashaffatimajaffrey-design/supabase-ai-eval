@@ -107,6 +107,29 @@ npm run dev
 To use it as an MCP tool in Claude Desktop, point its config at
 `backend/mcp_server.py` (see the docstring at the top of that file).
 
+## Tests & CI
+
+```bash
+pip install -r requirements.txt --break-system-packages
+pytest tests/ -v
+```
+
+10 unit tests covering the chunking logic (`ingest.chunk_text`) and the
+judge's JSON parsing (`judge.parse_judge_response`), including the
+fenced-markdown fallback path. `.github/workflows/ci.yml` runs these plus
+a frontend build on every push to `main`.
+
+## Pushing to GitHub
+
+This repo is already git-initialized with one commit. To publish it:
+
+```bash
+gh repo create supabase-ai-eval --public --source=. --push
+# or, without the gh CLI:
+git remote add origin https://github.com/<your-username>/supabase-ai-eval.git
+git push -u origin master
+```
+
 ## What I'd build next
 
 Given more time, the natural extension is feeding this same eval loop into
