@@ -6,6 +6,8 @@ Alternative: Voyage AI (Anthropic's recommended embedding partner) — set
 EMBEDDING_PROVIDER=voyage and update the `vector(1536)` columns in
 schema.sql to match Voyage's output dimension if you switch.
 """
+from dotenv import load_dotenv
+load_dotenv()
 import os
 
 EMBEDDING_PROVIDER = os.environ.get("EMBEDDING_PROVIDER", "openai")

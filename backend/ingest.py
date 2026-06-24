@@ -12,6 +12,7 @@ import argparse
 import glob
 import os
 import re
+import time
 
 from embeddings import embed_texts
 from db_client import insert_document, insert_chunks
@@ -21,8 +22,6 @@ CHUNK_OVERLAP = 120
 
 
 def chunk_text(text: str, size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
-    """Simple recursive-ish splitter: break on paragraph boundaries first,
-    then hard-wrap anything still too long."""
     paragraphs = re.split(r"\n\s*\n", text.strip())
     chunks, current = [], ""
 
@@ -52,6 +51,8 @@ def ingest_local_dir(dir_path: str):
             raw = f.read()
         title = os.path.basename(path).replace(".md", "").replace("-", " ").title()
         ingest_document(source_url=f"local://{os.path.basename(path)}", title=title, raw_content=raw)
+        print(f"  waiting 20s to respect rate limit...")
+        time.sleep(20)
 
 
 def ingest_urls(urls_file: str):
@@ -63,6 +64,8 @@ def ingest_urls(urls_file: str):
         resp = requests.get(url, timeout=20)
         resp.raise_for_status()
         ingest_document(source_url=url, title=url, raw_content=resp.text)
+        print(f"  waiting 20s to respect rate limit...")
+        time.sleep(20)
 
 
 def ingest_document(source_url: str, title: str, raw_content: str):

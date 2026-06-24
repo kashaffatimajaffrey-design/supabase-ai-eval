@@ -1,12 +1,11 @@
 """
 mcp_server.py
-Exposes the Supabase-docs RAG pipeline as an MCP server, so any MCP
-client (Claude Desktop, Claude Code, another agent) can call it as a tool.
+Exposes the Supabase-docs RAG pipeline as an MCP server.
 
 Run directly (stdio transport):
     python mcp_server.py
 
-Or register it in Claude Desktop's config:
+Or register in Claude Desktop's config:
     {
       "mcpServers": {
         "supabase-docs": {
@@ -16,10 +15,24 @@ Or register it in Claude Desktop's config:
       }
     }
 """
-from mcp.server.fastmcp import FastMCP
+import os
+import sys
+
+# Load env before anything else, silently
+from dotenv import load_dotenv
+load_dotenv()
+
+# Redirect stdout during imports to prevent any print() from corrupting
+# the stdio JSON-RPC channel
+_real_stdout = sys.stdout
+sys.stdout = open(os.devnull, "w")
 
 from retriever import retrieve
 from rag_agent import answer_query
+
+sys.stdout = _real_stdout  # restore stdout for MCP to use
+
+from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("supabase-docs")
 

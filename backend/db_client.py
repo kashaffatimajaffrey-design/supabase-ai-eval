@@ -5,6 +5,8 @@ Thin wrapper around the Supabase Python client. Uses the service_role key
 and eval scripts can bypass RLS for writes.
 """
 import os
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 from datetime import datetime, timezone
 from functools import lru_cache
 from supabase import create_client, Client
