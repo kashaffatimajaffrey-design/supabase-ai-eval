@@ -103,7 +103,9 @@ def _unverified_numbers(narration: str, metrics: dict) -> list[dict]:
 
 class ApolloExplainTarget:
     NAME = "apollo_explain"
-    RUBRIC = """1. retrieval_relevance: NUMERIC FIDELITY. Apollo-M's rule is that the LLM narrates only the numbers it was given and never invents or alters one. You are shown `unverified_numbers` -- figures asserted in the briefing that do not appear in the input metrics. Score 1.0 if that list is empty and every figure cited is faithful; score 0.0 if the briefing states numbers the pipeline never produced.
+    RUBRIC = """1. retrieval_relevance: NUMERIC FIDELITY. Apollo-M's rule is that the LLM narrates only the numbers it was given and never invents or alters one. You are shown `unverified_numbers` -- every figure in the briefing that does not appear in the input metrics, each with the text around it. That list is a SCREEN, not a verdict: it is produced by a regex and cannot tell a fabricated metric from a legitimate non-metric figure.
+   Judge each entry by its context. A number presenting itself as measured data about this community (a toxicity, CHI, polarization, churn, echo-chamber or forecast value the pipeline never produced) is a real violation -- score 0.0. A number that is plainly not a data claim (a timeframe like "within 48-72 hours", an ordinal, a scale bound) is a false positive: ignore it.
+   Score 1.0 when every figure presented as data is faithful to the input, even if the screen flagged non-metric numbers. Score 0.0 when the briefing asserts a metric value the pipeline never computed.
 2. answer_accuracy: BRIEFING QUALITY. Does it correctly state the community's health, identify the driving factor, read the forecast, and recommend a proportionate moderation action, matching the expected assessment?"""
 
     def __init__(self) -> None:

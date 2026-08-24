@@ -22,6 +22,7 @@ cannot tell those apart is not trustworthy in CI.
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -137,15 +138,37 @@ System output:
 Respond ONLY with a JSON object like:
 {{"retrieval_relevance": 0.8, "answer_accuracy": 0.9, "reasoning": "brief explanation"}}"""
 
+    # max_tokens has to cover reasoning as well as the answer. At 400 the budget
+    # was being spent on thinking, so the JSON came back empty or truncated and
+    # every judge call died on a decode error.
     r = client.messages.create(
-        model=MODEL, max_tokens=400, messages=[{"role": "user", "content": prompt}]
+        model=MODEL, max_tokens=2000, messages=[{"role": "user", "content": prompt}]
     )
-    text = r.content[0].text.strip()
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        clean = text.replace("```json", "").replace("```", "").strip()
-        return json.loads(clean)
+    # content[0] is not necessarily the answer: with extended thinking enabled the
+    # first block is a ThinkingBlock, which has no .text. Select text blocks by
+    # type rather than by position, the way rag_agent.answer_query already does.
+    text = "".join(b.text for b in r.content if b.type == "text").strip()
+    return _parse_scores(text)
+
+
+def _parse_scores(text: str) -> dict:
+    """Pull the score object out of the judge's reply.
+
+    Tolerates markdown fences and any prose the model wraps around the JSON;
+    a judge that scored correctly should not be recorded as an error because it
+    added a sentence of preamble.
+    """
+    if not text:
+        raise ValueError("judge returned no text (max_tokens likely exhausted by reasoning)")
+    for candidate in (text, text.replace("```json", "").replace("```", "").strip()):
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            pass
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if match:
+        return json.loads(match.group())
+    raise ValueError(f"judge reply was not JSON: {text[:160]!r}")
 
 
 def insert_eval_result(client, run_id, query_id, response, scores):
@@ -200,7 +223,7 @@ def run_eval(label: str, k: int, target_name: str, limit: int | None = None) -> 
     print(f"Eval run ID: {run_id}\n")
 
     passed = failed = errored = 0
-    consecutive_errors = 0
+    consecutive_infra = 0
     aborted = False
 
     for i, q in enumerate(queries, 1):
@@ -209,7 +232,7 @@ def run_eval(label: str, k: int, target_name: str, limit: int | None = None) -> 
             response = target.answer(q["query"], q["expected_answer"], k)
             scores = judge_result(q["query"], q["expected_answer"], response, target.RUBRIC)
             insert_eval_result(client, run_id, q["id"], response, scores)
-            consecutive_errors = 0
+            consecutive_infra = 0
 
             accuracy = scores.get("answer_accuracy", 0.0)
             if accuracy >= PASS_THRESHOLD:
@@ -229,10 +252,13 @@ def run_eval(label: str, k: int, target_name: str, limit: int | None = None) -> 
 
         except Exception as exc:
             errored += 1
-            consecutive_errors += 1
             kind = classify_error(exc)
+            # Only provider/transport failures count toward the abort. A data
+            # error is specific to one query, so it must not push an unrelated
+            # infra error over the threshold and stop an otherwise valid run.
+            consecutive_infra = consecutive_infra + 1 if kind == "infra" else 0
             print(f"  ERROR ({kind}) | {str(exc)[:160]}")
-            if kind == "infra" and consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+            if consecutive_infra >= MAX_CONSECUTIVE_ERRORS:
                 aborted = True
                 print(f"\nAborting: {consecutive_errors} consecutive infrastructure "
                       f"errors. Remaining {len(queries) - i} queries not attempted.")
