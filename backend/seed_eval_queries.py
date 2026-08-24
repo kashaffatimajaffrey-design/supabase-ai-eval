@@ -6,8 +6,7 @@ Questions are based on the sample_docs in this repo.
 Usage:
     python seed_eval_queries.py
 """
-from dotenv import load_dotenv
-load_dotenv()
+import config  # noqa: F401 - loads the repo-root .env
 
 from db_client import get_supabase_client
 
@@ -64,9 +63,26 @@ QUERIES = [
 
 
 def seed():
+    """Insert any queries not already present. Safe to re-run.
+
+    The original version issued a bare .insert() of every query, so each run
+    appended another full copy -- five runs left 40 rows for 8 questions and
+    silently inflated eval cost 5x. Reconciling against what is already stored
+    makes the seeder idempotent.
+    """
     client = get_supabase_client()
-    res = client.table("eval_queries").insert(QUERIES).execute()
-    print(f"Seeded {len(res.data)} eval queries.")
+    existing = {
+        row["query"]
+        for row in client.table("eval_queries").select("query").execute().data
+    }
+    missing = [q for q in QUERIES if q["query"] not in existing]
+
+    if not missing:
+        print(f"Up to date: all {len(QUERIES)} eval queries already seeded.")
+        return
+
+    client.table("eval_queries").insert(missing).execute()
+    print(f"Seeded {len(missing)} new eval queries ({len(existing)} already present).")
 
 
 if __name__ == "__main__":

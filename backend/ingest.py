@@ -12,10 +12,9 @@ import argparse
 import glob
 import os
 import re
-import time
 
 from embeddings import embed_texts
-from db_client import insert_document, insert_chunks
+from db_client import replace_document, insert_chunks
 
 CHUNK_SIZE = 800      # characters, not tokens — simple + dependency-free
 CHUNK_OVERLAP = 120
@@ -51,8 +50,6 @@ def ingest_local_dir(dir_path: str):
             raw = f.read()
         title = os.path.basename(path).replace(".md", "").replace("-", " ").title()
         ingest_document(source_url=f"local://{os.path.basename(path)}", title=title, raw_content=raw)
-        print(f"  waiting 20s to respect rate limit...")
-        time.sleep(20)
 
 
 def ingest_urls(urls_file: str):
@@ -64,12 +61,10 @@ def ingest_urls(urls_file: str):
         resp = requests.get(url, timeout=20)
         resp.raise_for_status()
         ingest_document(source_url=url, title=url, raw_content=resp.text)
-        print(f"  waiting 20s to respect rate limit...")
-        time.sleep(20)
 
 
 def ingest_document(source_url: str, title: str, raw_content: str):
-    doc_id = insert_document(source_url=source_url, title=title, raw_content=raw_content)
+    doc_id = replace_document(source_url=source_url, title=title, raw_content=raw_content)
     chunks = chunk_text(raw_content)
     if not chunks:
         print(f"  skipped (no chunks): {title}")

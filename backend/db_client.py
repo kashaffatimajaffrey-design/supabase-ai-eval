@@ -5,8 +5,7 @@ Thin wrapper around the Supabase Python client. Uses the service_role key
 and eval scripts can bypass RLS for writes.
 """
 import os
-from dotenv import load_dotenv
-load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+import config  # noqa: F401 - loads the repo-root .env
 from datetime import datetime, timezone
 from functools import lru_cache
 from supabase import create_client, Client
@@ -74,3 +73,25 @@ def get_eval_queries() -> list[dict]:
     client = get_supabase_client()
     res = client.table("eval_queries").select("*").execute()
     return res.data
+
+
+def replace_document(source_url: str, title: str, raw_content: str) -> str:
+    """Insert a document, replacing any existing one with the same source_url.
+
+    ingest.py originally called insert_document() unconditionally, so every
+    re-run appended another copy of the whole corpus -- 6 source files had
+    become 25 document rows. Duplicate chunks then dominated top-k retrieval
+    (five copies of one chunk instead of five distinct ones), which silently
+    drove eval retrieval_relevance to zero.
+
+    document_chunks has ON DELETE CASCADE, so removing the old row clears its
+    stale chunks too.
+    """
+    client = get_supabase_client()
+    client.table("documents").delete().eq("source_url", source_url).execute()
+    res = client.table("documents").insert({
+        "source_url": source_url,
+        "title": title,
+        "raw_content": raw_content,
+    }).execute()
+    return res.data[0]["id"]
