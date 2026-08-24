@@ -20,12 +20,12 @@ real debugging, real errors, real fixes.
 
 | Supabase product | How it's used here |
 |---|---|
-| **Postgres + pgvector** | `document_chunks` table with `vector(512)` column, ivfflat index, cosine similarity search via RPC |
+| **Postgres + pgvector** | `document_chunks` with a `vector(512)` column, HNSW index, cosine similarity via RPC — plus hybrid retrieval fusing vector search with Postgres full-text |
 | **Row Level Security** | All 5 tables have RLS enabled. Public read policies for the dashboard (anon key). Writes locked to service_role only |
 | **Storage** | Covered in sample docs — ingested, chunked, and retrievable by the RAG agent |
 | **Edge Functions** | Covered in sample docs — ingested, chunked, and retrievable by the RAG agent |
 | **Auth** | API key handling — anon key for frontend (respects RLS), service_role for backend (bypasses RLS). Documented in sample docs |
-| **PostgREST / RPC** | `match_document_chunks()` SQL function called via `.rpc()` from Python |
+| **PostgREST / RPC** | `match_document_chunks()` and `match_document_chunks_hybrid()` SQL functions called via `.rpc()` from Python |
 | **React client** | Frontend reads `eval_runs` and `eval_results` via `@supabase/supabase-js` with anon key |
 | **Observability** | Monitored via Supabase dashboard — query performance, peak connections, disk IO, service health |
 
@@ -65,7 +65,8 @@ anon key + Supabase JS
 Five tables, one RPC function — all in `db/schema.sql`:
 
 - **`documents`** — raw source docs (url, title, full text)
-- **`document_chunks`** — chunked text + `vector(512)` embedding, FK to `documents`, ivfflat index
+- **`document_chunks`** — chunked text + `vector(512)` embedding, FK to `documents`, HNSW index,
+  and a generated `content_fts` tsvector with a GIN index for the keyword half of hybrid search
 - **`eval_queries`** — test set (question, expected answer, category, difficulty)
 - **`eval_runs`** — one row per eval execution (model, embed model, git commit, timestamps)
 - **`eval_results`** — per-query scores (retrieval_relevance, answer_accuracy, latency_ms, passed, judge_reasoning)
@@ -82,13 +83,24 @@ This is the part that matters for support work — knowing what breaks and why:
 - **`KeyError: SUPABASE_URL`** — `load_dotenv()` firing after `os.environ` 
   reads at module import time. Fixed by moving `load_dotenv()` to the top 
   of every entry point before any other imports.
-- **`Invalid API key` (401)** — `supabase-py` doesn't accept the new 
-  `sb_secret_` format keys yet. Fix: use the legacy JWT `service_role` key 
-  from Settings → API Keys → Legacy tab.
+- **`Invalid API key` (401)** — `supabase-py` rejected the new `sb_secret_`
+  format keys, so the workaround at the time was the legacy JWT `service_role`
+  key from Settings → API Keys → Legacy tab. **No longer needed**: re-tested on
+  supabase-py 2.31.0 and an `sb_secret_` key authenticates and writes fine, so
+  the current dashboard key works directly.
 - **`vector(1536)` dimension mismatch** — switched from OpenAI 
   (`text-embedding-3-small`, 1536-dim) to Voyage AI (`voyage-3-lite`, 
   512-dim) mid-build. Had to drop and recreate `document_chunks` and update 
   the `match_document_chunks` RPC signature to `vector(512)`.
+- **An ivfflat index silently destroying recall** — the sharpest one. With
+  `lists=100` over a 12-row table and `ivfflat.probes` at its default of 1, a
+  search reads a single list and returns only the rows that happen to live in
+  it. Every query came back with one result at ~0.18 similarity from the wrong
+  document, which reads like a weak embedding model, not an index problem.
+  Dropping the index took the query "How do I enable Row Level Security on a
+  table?" from 1 result at 0.18 to 5 results led by the Row Level Security
+  chunk at 0.69. Replaced with HNSW, which has no list count to size against
+  the row count and so cannot fail this way as the table grows.
 - **Voyage rate limit (3 RPM free tier)** — added `time.sleep(20)` between 
   ingestion calls to stay within free tier limits.
 - **MCP stdio corruption** — any `print()` firing during import corrupts the 

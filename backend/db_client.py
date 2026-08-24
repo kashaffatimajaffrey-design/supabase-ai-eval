@@ -45,6 +45,24 @@ def match_chunks(query_embedding: list[float], match_count: int = 5) -> list[dic
     return res.data
 
 
+def match_chunks_hybrid(query_embedding: list[float], query_text: str,
+                        match_count: int = 5) -> list[dict]:
+    """
+    Vector and full-text retrieval fused by reciprocal rank (db/hybrid_search.sql).
+
+    Returns the same keys as match_chunks plus vector_rank, keyword_rank and
+    rrf_score, so a caller can see which half found a result rather than
+    treating retrieval as a black box.
+    """
+    client = get_supabase_client()
+    res = client.rpc("match_document_chunks_hybrid", {
+        "query_embedding": query_embedding,
+        "query_text": query_text,
+        "match_count": match_count,
+    }).execute()
+    return res.data
+
+
 def create_eval_run(run_label: str, model_used: str, embed_model: str, git_commit: str = "") -> str:
     client = get_supabase_client()
     res = client.table("eval_runs").insert({

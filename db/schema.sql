@@ -26,11 +26,25 @@ create table if not exists document_chunks (
   created_at    timestamptz not null default now()
 );
 
--- NOTE: no ANN index by default. An ivfflat index with lists=100 over a small
--- table returns zero rows for many queries (probes=1 hits an empty list).
--- Add one only at scale, sized lists ~= rows/1000, and ANALYZE after building:
---   create index document_chunks_embedding_idx
---     on document_chunks using ivfflat (embedding vector_cosine_ops) with (lists = 100);
+-- ── ANN index ───────────────────────────────────────────────────────────────
+-- HNSW, not ivfflat, and the difference is not academic. An ivfflat index built
+-- with lists=100 over a small table silently destroys recall: the rows are
+-- spread across 100 lists, ivfflat.probes defaults to 1, so a search reads one
+-- list and returns whatever few rows happen to live in it. This project ran in
+-- exactly that state — 12 chunks, every query returning a single result at
+-- ~0.18 similarity from the wrong document, which reads like a bad embedding
+-- model rather than an index misconfiguration. Dropping it took the same query
+-- from 1 result at 0.18 to 5 results led by the correct document at 0.69.
+--
+-- HNSW has no equivalent cliff. It needs no list count tuned to the row count,
+-- so it behaves correctly at 12 rows and at 12 million, and it cannot quietly
+-- start under-returning as the table grows away from whatever `lists` was
+-- guessed at build time.
+drop index if exists document_chunks_embedding_idx;  -- legacy ivfflat, see above
+
+create index if not exists document_chunks_embedding_hnsw
+  on document_chunks using hnsw (embedding vector_cosine_ops)
+  with (m = 16, ef_construction = 64);
 
 create index if not exists document_chunks_document_id_idx
   on document_chunks (document_id);
