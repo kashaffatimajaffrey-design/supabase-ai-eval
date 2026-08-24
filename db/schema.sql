@@ -22,12 +22,15 @@ create table if not exists document_chunks (
   chunk_index   int not null,
   content       text not null,
   token_count   int,
-  embedding     vector(1536), -- dimension matches EMBEDDING_DIM in .env (default: OpenAI text-embedding-3-small)
+  embedding     vector(512), -- must match embeddings.EMBEDDING_DIMS (voyage-3-lite = 512)
   created_at    timestamptz not null default now()
 );
 
-create index if not exists document_chunks_embedding_idx
-  on document_chunks using ivfflat (embedding vector_cosine_ops) with (lists = 100);
+-- NOTE: no ANN index by default. An ivfflat index with lists=100 over a small
+-- table returns zero rows for many queries (probes=1 hits an empty list).
+-- Add one only at scale, sized lists ~= rows/1000, and ANALYZE after building:
+--   create index document_chunks_embedding_idx
+--     on document_chunks using ivfflat (embedding vector_cosine_ops) with (lists = 100);
 
 create index if not exists document_chunks_document_id_idx
   on document_chunks (document_id);
@@ -81,7 +84,7 @@ create index if not exists eval_results_run_idx on eval_results (eval_run_id);
 -- ============================================================
 
 create or replace function match_document_chunks(
-  query_embedding vector(1536),
+  query_embedding vector(512),
   match_count     int default 5
 )
 returns table (
