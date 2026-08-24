@@ -201,8 +201,10 @@ pip install -r requirements.txt
 cp .env.example .env   # fill in Supabase + Anthropic + Voyage keys
 
 # 2. apply schema (Supabase SQL editor)
-#    paste db/schema.sql and run it
 #    enable the vector extension first: Database → Extensions → vector
+#    paste db/schema.sql and run it
+#    then paste db/hybrid_search.sql for keyword + RRF retrieval
+#    both are idempotent, so re-running either is safe
 
 # 3. ingest sample docs
 cd backend && python ingest.py --dir ../sample_docs
