@@ -203,6 +203,41 @@ def _dim1(target_name: str) -> str:
     }.get(target_name, "dim1")
 
 
+def _corpus_problem(client, target_name: str) -> str | None:
+    """Refuse to score a retrieval target whose corpus is empty.
+
+    An eval run against an empty document_chunks does not fail — it produces
+    numbers. Retrieval returns nothing, so relevance is 0.00 for every query,
+    and the generator answers a few of them correctly from its own training,
+    which the judge scores as passing. The output looks like a bad retrieval
+    configuration and is really a missing corpus, and nothing in the run says so.
+
+    That has now happened twice on this project, both times after the
+    document_chunks table was recreated — which takes its rows, its indexes and
+    its RLS policy with it. The cause was different each time, so this checks
+    the state rather than trying to anticipate the cause.
+
+    Only meaningful for targets that retrieve; others return None untouched.
+    """
+    if target_name != "supabase_docs":
+        return None
+    try:
+        res = client.table("document_chunks").select("id").limit(1).execute()
+    except Exception as exc:  # noqa: BLE001 — cannot verify, so do not block
+        print(f"warning: could not check the corpus ({type(exc).__name__}: {exc})")
+        return None
+    if res.data:
+        return None
+    return (
+        "document_chunks is empty, so every query would retrieve nothing and "
+        "score 0.00 relevance.\n"
+        "Refusing to run: those numbers would look like a retrieval problem "
+        "rather than a missing corpus.\n"
+        "  python backend/ingest.py --dir ../sample_docs\n"
+        "Then check the rest with: python backend/check_schema_drift.py"
+    )
+
+
 def run_eval(label: str, k: int, target_name: str, limit: int | None = None) -> int:
     target = get_target(target_name)
     client = get_supabase_client()
@@ -211,6 +246,10 @@ def run_eval(label: str, k: int, target_name: str, limit: int | None = None) -> 
     if not queries:
         print(f"No eval_queries found for target {target_name!r}. "
               f"Seed some first (see seed_eval_queries.py).")
+        return 1
+
+    if (problem := _corpus_problem(client, target_name)):
+        print(problem)
         return 1
 
     queries.sort(key=lambda q: q["query"])
