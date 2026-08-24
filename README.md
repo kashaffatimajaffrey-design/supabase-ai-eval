@@ -7,6 +7,10 @@ RLS, pgvector, Storage, and the JS/Python client libraries.
 
 ## Youtube Demo:
 
+> Recorded in June, before the retrieval work. It shows the project when an
+> ivfflat index was silently destroying recall, so the eval numbers in it are the
+> broken ones. See [Current results](#current-results) for where it stands now.
+
 https://youtu.be/e-qrZo0g7us?si=lacN2cY8HtO5myBa
 
 ## Why I built this
@@ -148,9 +152,37 @@ This is the part that matters for support work — knowing what breaks and why:
 - **MCP stdio corruption** — any `print()` firing during import corrupts the 
   JSON-RPC channel. Fixed by suppressing stdout during module imports in 
   `mcp_server.py`.
-- **Anthropic + OpenAI billing** — both require paid credits for API access. 
-  Eval runs show correct pipeline flow but 0% pass rate until credits are 
-  added — documented honestly in the demo video.
+- **Anthropic + OpenAI billing** — both require paid credits for API access.
+  Early eval runs showed correct pipeline flow but a 0% pass rate until credits
+  were added, which is what the demo video records. That is no longer the
+  current state; see below.
+
+## Current results
+
+Latest run, after the ivfflat fix and a re-ingest:
+
+```
+target   supabase_docs
+scored   7/8   (passed 6, failed 1)
+errored  1
+pass rate 86% of scored queries
+```
+
+Relevance ranged 0.45–0.90 on the queries the corpus covers. One query errored on
+a transient DNS failure reaching the embedding provider, and the harness
+correctly refused to call the run a valid quality signal because of it —
+distinguishing an error from a failure is the whole point of scoring them
+separately.
+
+The one genuine failure is worth more than the passes. "How do I upload a file to
+Supabase Storage?" scored 0.10 relevance — but retrieval was perfect, ranking the
+Storage chunk first by both vector and hybrid search. The corpus covers buckets
+and RLS on `storage.objects` and never shows the upload call, so the generator
+correctly declined to invent an API it could not see. That is a corpus coverage
+gap, not a retrieval or model failure, and the eval separated the two.
+
+> The demo video predates the retrieval fixes below and shows the earlier,
+> broken state.
 
 ## Project layout
 supabase-ai-eval/
