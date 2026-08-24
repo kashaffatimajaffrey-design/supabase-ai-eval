@@ -130,9 +130,26 @@ alter table eval_queries enable row level security;
 alter table eval_runs enable row level security;
 alter table eval_results enable row level security;
 
-create policy "public read documents" on documents for select using (true);
-create policy "public read chunks" on document_chunks for select using (true);
-create policy "public read eval_queries" on eval_queries for select using (true);
-create policy "public read eval_runs" on eval_runs for select using (true);
-create policy "public read eval_results" on eval_results for select using (true);
+-- `create policy` has no IF NOT EXISTS, so on a re-run the first of these
+-- aborts the whole script with "policy already exists" — and anything below it
+-- never runs. That is not hypothetical: document_chunks was dropped and
+-- recreated during the 1536 -> 512 migration, schema.sql was re-run to restore
+-- it, the run died on the documents policy above, and the chunks policy was
+-- never created. The table then had RLS enabled and no SELECT policy, which
+-- denies everyone except service_role — so the table held 12 rows that the anon
+-- key could not see, and retrieval through the dashboard returned nothing.
+--
+-- Dropping first makes the whole block idempotent, so a partial re-run cannot
+-- leave one table readable and the next locked.
+drop policy if exists "public read documents"    on documents;
+drop policy if exists "public read chunks"       on document_chunks;
+drop policy if exists "public read eval_queries" on eval_queries;
+drop policy if exists "public read eval_runs"    on eval_runs;
+drop policy if exists "public read eval_results" on eval_results;
+
+create policy "public read documents"    on documents        for select using (true);
+create policy "public read chunks"       on document_chunks  for select using (true);
+create policy "public read eval_queries" on eval_queries     for select using (true);
+create policy "public read eval_runs"    on eval_runs        for select using (true);
+create policy "public read eval_results" on eval_results     for select using (true);
 -- No insert/update/delete policies for anon/authenticated -> only service_role (bypasses RLS) can write.
