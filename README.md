@@ -76,6 +76,48 @@ RLS is enabled on all tables. Public `SELECT` policies allow the React
 dashboard to read with just the anon key. No public insert/update/delete — 
 only service_role can write, used server-side by ingest and eval scripts.
 
+## Retrieval: vector, keyword, or both
+
+`retrieve()` is vector-only. `retrieve_hybrid()` fuses it with Postgres
+full-text search using reciprocal rank fusion, and is worth reaching for when
+queries carry exact identifiers.
+
+Embeddings rank by meaning, so a rare literal token is diluted by the prose
+around it and the chunk that actually contains it can fall below one that merely
+discusses the topic. Measured on this corpus:
+
+| Query | Vector only (top 3) | Hybrid (top 3) |
+|---|---|---|
+| "How do I stop other users from reading my rows?" | RLS, RLS, Auth Keys | same order, unchanged |
+| `auth.uid()` | Auth Keys, Storage, Auth Keys | **RLS**, Storage, Auth Keys |
+
+For `auth.uid()` the Row Level Security chunk ranks **5th by vector and 1st by
+keyword**, so vector-only retrieval misses it entirely at k=3. On the
+plain-language question the keyword half matches nothing and the vector ordering
+carries through untouched — fusion helps where it can and stays out of the way
+where it cannot.
+
+Fusion is by rank, not by score. Cosine similarity is bounded 0..1 and `ts_rank`
+is unbounded and corpus-dependent, so blending the numbers means inventing a
+scale factor; using positions avoids the question.
+
+## Guarding against schema drift
+
+The embedding dimension is declared in three places that cannot check each
+other: `EMBEDDING_DIMS`, the `vector(N)` column, and the RPC's argument type.
+Changing provider means changing all three, and a mismatch fails quietly — the
+write is rejected, the table stays empty, and retrieval returns nothing, which
+looks like a bad model rather than a schema problem. This project spent time in
+exactly that state.
+
+```bash
+python backend/check_schema_drift.py
+```
+
+Checks that the provider still returns the width `EMBEDDING_DIMS` claims, that
+the vectors actually stored match it, and that the RPC accepts one. Exits
+non-zero on any disagreement, so it can run in CI or before an ingest.
+
 ## Real errors I hit and fixed
 
 This is the part that matters for support work — knowing what breaks and why:
@@ -115,11 +157,15 @@ supabase-ai-eval/
 
 ├── db/
 
-│   └── schema.sql              # pgvector schema, RPC fn, RLS policies
+│   ├── schema.sql              # pgvector schema, HNSW index, RPC fn, RLS policies
+
+│   └── hybrid_search.sql       # tsvector column + RRF fusion RPC (run after schema.sql)
 
 ├── backend/
 
 │   ├── db_client.py            # Supabase client (service_role, server-side)
+
+│   ├── check_schema_drift.py   # fails if the DB and the embedding config disagree
 
 │   ├── embeddings.py           # pluggable: OpenAI / Voyage AI
 
