@@ -19,8 +19,7 @@ import os
 import sys
 
 # Load env before anything else, silently
-from dotenv import load_dotenv
-load_dotenv()
+import config  # noqa: F401 - loads the repo-root .env
 
 # Redirect stdout during imports to prevent any print() from corrupting
 # the stdio JSON-RPC channel
