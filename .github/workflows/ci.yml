@@ -26,6 +26,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-      - run: npm install
+          # Vite 8 requires ^20.19 || >=22.12. Pinning the major to 20 left the
+          # job one patch release away from an engine error for no benefit.
+          node-version: "22"
+      # `npm ci` rather than `npm install`: it installs exactly what the lockfile
+      # says and fails if the lockfile and package.json disagree, which is the
+      # difference between CI reproducing a build and CI resolving a new one.
+      - run: npm ci
       - run: npm run build
