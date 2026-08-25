@@ -5,13 +5,22 @@ generation quality metric logged back into Supabase itself. Built to
 demonstrate deep, hands-on familiarity with the Supabase stack — database, 
 RLS, pgvector, Storage, and the JS/Python client libraries.
 
-## Youtube Demo:
+## Live dashboard
+
+**https://supabase-ai-eval.vercel.app**
+
+Reads `eval_runs` and `eval_results` straight from Supabase with the publishable
+key, so it shows the latest run rather than a snapshot of one — pass rate,
+average retrieval relevance and latency, the trend across labelled runs, and the
+per-query breakdown.
+
+## Demo video
+
+https://youtu.be/e-qrZo0g7us?si=lacN2cY8HtO5myBa
 
 > Recorded in June, before the retrieval work. It shows the project when an
 > ivfflat index was silently destroying recall, so the eval numbers in it are the
-> broken ones. See [Current results](#current-results) for where it stands now.
-
-https://youtu.be/e-qrZo0g7us?si=lacN2cY8HtO5myBa
+> broken ones — the dashboard above is current.
 
 ## Why I built this
 
@@ -30,7 +39,7 @@ real debugging, real errors, real fixes.
 | **Edge Functions** | Covered in sample docs — ingested, chunked, and retrievable by the RAG agent |
 | **Auth** | API key handling — anon key for frontend (respects RLS), service_role for backend (bypasses RLS). Documented in sample docs |
 | **PostgREST / RPC** | `match_document_chunks()` and `match_document_chunks_hybrid()` SQL functions called via `.rpc()` from Python |
-| **React client** | Frontend reads `eval_runs` and `eval_results` via `@supabase/supabase-js` with anon key |
+| **React client** | [Live dashboard](https://supabase-ai-eval.vercel.app) — reads `eval_runs` and `eval_results` via `@supabase/supabase-js` with the publishable key, so RLS is what decides what it can see |
 | **Observability** | Monitored via Supabase dashboard — query performance, peak connections, disk IO, service health |
 
 ## Architecture
@@ -213,7 +222,7 @@ supabase-ai-eval/
 
 │   └── seed_eval_queries.py    # seeds 8 test queries across categories
 
-├── frontend/                   # Vite + React + Tailwind eval dashboard
+├── frontend/                   # Vite + React + Tailwind eval dashboard (deployed)
 
 │   └── src/{App.tsx, api.ts, main.tsx}
 
