@@ -1,9 +1,21 @@
 # supabase-ai-eval
 
-A RAG agent that answers Supabase docs questions, with every retrieval and 
-generation quality metric logged back into Supabase itself. Built to 
-demonstrate deep, hands-on familiarity with the Supabase stack — database, 
-RLS, pgvector, Storage, and the JS/Python client libraries.
+The eval in this project caught a bug I would have blamed on the model. An
+ivfflat index with `lists=100` on a 12-row table meant each search read one list
+and nothing else. The query "How do I enable Row Level Security on a table?"
+came back with 1 result at 0.18 similarity, from the wrong document. When I
+dropped that index, the same query returned 5 results, led by the Row Level
+Security chunk at 0.69. I replaced it with HNSW, which has no list count to get
+wrong as the table grows.
+
+On the latest run, 6 of the 7 scored queries passed: an 86% pass rate on scored
+queries. One more query errored on a DNS failure, so it was not scored. The one
+real failure is a gap in the docs I ingested, not in retrieval. The details are
+in [Current results](#current-results).
+
+The project itself is a RAG agent that answers questions about the Supabase docs.
+It logs every retrieval and answer score back into Supabase, and a live
+dashboard reads the scores from there.
 
 ## Live dashboard
 
@@ -43,35 +55,24 @@ real debugging, real errors, real fixes.
 | **Observability** | Monitored via Supabase dashboard — query performance, peak connections, disk IO, service health |
 
 ## Architecture
-sample_docs/*.md ──ingest.py──▶ documents + document_chunks (pgvector)
 
-│
-
-retriever.py (embed query → RPC match)
-
-│
-
+```
+sample_docs/*.md  ──ingest.py──▶  documents + document_chunks (pgvector)
+                                          │
+                                   retriever.py (embed query → RPC match)
+                                          │
 query ──▶ rag_agent.py ──▶ Claude ──▶ grounded answer
-
-│
-
-┌───────────────┴──────────────┐
-
-│                               │
-
-mcp_server.py                   run_eval.py
-
-(MCP tool surface)          (LLM-as-judge scoring,
-
-logs to eval_runs/results)
-
-│
-
-frontend/ (Vite + React)
-
-live eval dashboard via
-
-anon key + Supabase JS
+                                          │
+                          ┌───────────────┴──────────────────┐
+                          │                                  │
+                    mcp_server.py                       run_eval.py
+                 (MCP tool surface)               (LLM-as-judge scoring,
+                                                logs to eval_runs/results)
+                                                             │
+                                                  frontend/ (Vite + React)
+                                                  live eval dashboard via
+                                                  anon key + Supabase JS
+```
 
 ## Database schema
 
@@ -194,45 +195,29 @@ gap, not a retrieval or model failure, and the eval separated the two.
 > broken state.
 
 ## Project layout
+
+```
 supabase-ai-eval/
-
 ├── db/
-
 │   ├── schema.sql              # pgvector schema, HNSW index, RPC fn, RLS policies
-
 │   └── hybrid_search.sql       # tsvector column + RRF fusion RPC (run after schema.sql)
-
 ├── backend/
-
 │   ├── db_client.py            # Supabase client (service_role, server-side)
-
 │   ├── check_schema_drift.py   # fails if the DB and the embedding config disagree
-
 │   ├── embeddings.py           # pluggable: OpenAI / Voyage AI
-
 │   ├── retriever.py            # embed query → match_document_chunks RPC
-
 │   ├── rag_agent.py            # retrieval + Claude generation
-
 │   ├── ingest.py               # chunk + embed + insert docs
-
 │   ├── mcp_server.py           # MCP tool surface
-
 │   ├── run_eval.py             # orchestrates eval runs, logs to Supabase
-
 │   └── seed_eval_queries.py    # seeds 8 test queries across categories
-
 ├── frontend/                   # Vite + React + Tailwind eval dashboard (deployed)
-
 │   └── src/{App.tsx, api.ts, main.tsx}
-
 ├── sample_docs/                # 6 local .md files (Auth, RLS, pgvector,
-
 │                               #   Edge Functions, Storage, CLI Migrations)
-
 ├── .env.example                # backend env template
-
 └── frontend/.env.example       # frontend env template (anon key only)
+```
 
 ## Setup
 
